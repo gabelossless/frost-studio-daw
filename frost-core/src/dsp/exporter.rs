@@ -19,7 +19,7 @@ impl Exporter {
             .map_err(|e| format!("Failed to create WAV writer: {}", e))?;
 
         // Reset clock to start
-        mixer_state.clock.stop();
+        mixer_state.clock.reset();
         mixer_state.clock.start();
 
         // Calculate total samples
@@ -37,6 +37,7 @@ impl Exporter {
         
         // Reset clock back to zero
         mixer_state.clock.stop();
+        mixer_state.clock.reset();
 
         Ok(())
     }

@@ -1,12 +1,15 @@
 use super::AudioPlugin;
 
 pub struct Compressor {
-    threshold: f32, // 0.0 to 1.0 (linear)
-    ratio: f32,      // 1.0 to 20.0
-    attack: f32,     // seconds
-    release: f32,    // seconds
-    knee: f32,       // 0.0 to 1.0
-    makeup: f32,     // 0.0 to 4.0 (gain)
+    threshold: f32,
+    ratio: f32,
+    attack: f32,
+    release: f32,
+    makeup: f32,
+    
+    // Pre-computed coefficients
+    attack_coef: f32,
+    release_coef: f32,
     
     // Internal state
     envelope: f32,
@@ -15,16 +18,24 @@ pub struct Compressor {
 
 impl Compressor {
     pub fn new(sample_rate: f32) -> Self {
-        Self {
+        let mut c = Self {
             threshold: 0.5,
             ratio: 4.0,
             attack: 0.01,
             release: 0.1,
-            knee: 0.1,
             makeup: 1.0,
+            attack_coef: 0.0,
+            release_coef: 0.0,
             envelope: 0.0,
             sample_rate,
-        }
+        };
+        c.update_coefficients();
+        c
+    }
+
+    fn update_coefficients(&mut self) {
+        self.attack_coef = (-1.0 / (self.attack * self.sample_rate)).exp();
+        self.release_coef = (-1.0 / (self.release * self.sample_rate)).exp();
     }
 }
 
@@ -34,14 +45,10 @@ impl AudioPlugin for Compressor {
     fn process(&mut self, left: f32, right: f32) -> (f32, f32) {
         let input_level = (left.abs() + right.abs()) * 0.5;
         
-        // Simple envelope follower
-        let attack_coef = (-1.0 / (self.attack * self.sample_rate)).exp();
-        let release_coef = (-1.0 / (self.release * self.sample_rate)).exp();
-        
         if input_level > self.envelope {
-            self.envelope = attack_coef * (self.envelope - input_level) + input_level;
+            self.envelope = self.attack_coef * (self.envelope - input_level) + input_level;
         } else {
-            self.envelope = release_coef * (self.envelope - input_level) + input_level;
+            self.envelope = self.release_coef * (self.envelope - input_level) + input_level;
         }
 
         // Compression logic (simplified VCA style)
@@ -62,8 +69,8 @@ impl AudioPlugin for Compressor {
         match id {
             0 => self.threshold = value.clamp(0.001, 1.0),
             1 => self.ratio = value.clamp(1.0, 50.0),
-            2 => self.attack = value.clamp(0.0001, 1.0),
-            3 => self.release = value.clamp(0.001, 5.0),
+            2 => { self.attack = value.clamp(0.0001, 1.0); self.update_coefficients(); },
+            3 => { self.release = value.clamp(0.001, 5.0); self.update_coefficients(); },
             4 => self.makeup = value.clamp(0.0, 10.0),
             _ => (),
         }

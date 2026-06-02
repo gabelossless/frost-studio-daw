@@ -173,7 +173,7 @@ impl MixerChannel {
         let gain = self.params.volume;
         
         // 5. Sidechain Ducking
-        let reduction = 1.0 - (sidechain_level * self.params.sidechain_ratio).min(1.0);
+        let reduction = 1.0 - (sidechain_level * self.params.sidechain_ratio).clamp(0.0, 1.0);
 
         let out_l = l * pan_l * gain * reduction;
         let out_r = r * pan_r * gain * reduction;

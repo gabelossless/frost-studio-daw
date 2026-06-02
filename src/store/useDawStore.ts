@@ -177,6 +177,8 @@ function pitchToMidiNumber(pitch: string): number {
 
 let meterUnlisten: (() => void) | null = null;
 let audioTickInterval: number | null = null;
+let rafTickId: number | null = null;
+let midiAccessCleanup: (() => void) | null = null;
 
 export const useDawStore = create<DawState>()(
     temporal(
@@ -224,7 +226,6 @@ export const useDawStore = create<DawState>()(
             togglePlay: async () => {
                 const playing = !get().isPlaying;
                 set({ isPlaying: playing });
-                // Ensure Web Audio context is resumed for audio playback
                 try {
                     const { resumeAudio } = await import('../audioContext');
                     resumeAudio();
@@ -235,20 +236,25 @@ export const useDawStore = create<DawState>()(
                 }
 
                 if (playing && !audioTickInterval) {
-                    audioTickInterval = window.setInterval(() => {
+                    if (rafTickId) { cancelAnimationFrame(rafTickId); rafTickId = null; }
+                    let lastFrame = performance.now();
+                    const tick = () => {
+                        if (!get().isPlaying) return;
                         if ((window as any).__TAURI__) {
                             invoke('process_audio_tick').catch(console.error);
                         } else {
-                            // Browser fallback playhead increment (approximate)
+                            const now = performance.now();
+                            const dt = (now - lastFrame) / 1000;
+                            lastFrame = now;
                             const bpm = get().tempo || 120;
                             const beatsPerSecond = bpm / 60;
-                            const beatsPerInterval = beatsPerSecond * (30 / 1000); // 30ms interval
-                            set(state => ({ playheadPosition: state.playheadPosition + beatsPerInterval }));
+                            set(state => ({ playheadPosition: state.playheadPosition + beatsPerSecond * dt }));
                         }
-                    }, 30);
-                } else if (!playing && audioTickInterval) {
-                    window.clearInterval(audioTickInterval);
-                    audioTickInterval = null;
+                        rafTickId = requestAnimationFrame(tick);
+                    };
+                    rafTickId = requestAnimationFrame(tick);
+                } else if (!playing) {
+                    if (rafTickId) { cancelAnimationFrame(rafTickId); rafTickId = null; }
                 }
             },
             stop: async () => {
@@ -256,10 +262,7 @@ export const useDawStore = create<DawState>()(
                 if (window.__TAURI_INTERNALS__ || true) {
                     await invoke('set_transport', { playing: false }).catch(console.error);
                 }
-                if (audioTickInterval) {
-                    window.clearInterval(audioTickInterval);
-                    audioTickInterval = null;
-                }
+                if (rafTickId) { cancelAnimationFrame(rafTickId); rafTickId = null; }
             },
             toggleRecord: () => set((state) => ({ isRecording: !state.isRecording, isPlaying: true })),
             toggleMetronome: () => set((state) => ({ metronomeEnabled: !state.metronomeEnabled })),
@@ -535,20 +538,24 @@ export const useDawStore = create<DawState>()(
                 // Initialize Web MIDI
                 if (navigator.requestMIDIAccess) {
                     try {
+                        if (midiAccessCleanup) {
+                            midiAccessCleanup();
+                            midiAccessCleanup = null;
+                        }
                         const midiAccess = await navigator.requestMIDIAccess();
                         const devices: string[] = [];
                         const inputs = midiAccess.inputs.values();
+                        const handlers: { input: MIDIInput, handler: (e: MIDIMessageEvent) => void }[] = [];
                         
                         for (let input = inputs.next(); input && !input.done; input = inputs.next()) {
                             const device = input.value;
                             devices.push(device.name || 'Unknown Device');
                             
-                            device.onmidimessage = (e: any) => {
+                            const handler = (e: any) => {
                                 const [status, note, velocity] = e.data;
                                 const type = status & 0xf0;
                                 const state = get();
                                 
-                                // Route to Armed track, or Selected track, or Track 0
                                 const activeTrack = state.tracks.find((t: any) => t.armed) || state.tracks.find((t: any) => t.id === state.selectedTrackId);
                                 const channelId = state.tracks.indexOf(activeTrack || state.tracks[0]);
                                 if (channelId === -1) return;
@@ -559,7 +566,14 @@ export const useDawStore = create<DawState>()(
                                     invoke('trigger_note_off', { channelId, note }).catch(console.error);
                                 }
                             };
+                            device.onmidimessage = handler;
+                            handlers.push({ input: device, handler });
                         }
+                        midiAccessCleanup = () => {
+                            for (const { input, handler } of handlers) {
+                                input.onmidimessage = null;
+                            }
+                        };
                         set({ midiDevices: devices });
                     } catch (err) {
                         console.error("Failed to access MIDI devices:", err);

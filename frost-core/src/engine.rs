@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::path::{Path};
 
@@ -130,7 +130,7 @@ impl MixerState {
     }
 }
 
-pub type SharedMixer = Arc<Mutex<MixerState>>;
+pub type SharedMixer = Arc<parking_lot::Mutex<MixerState>>;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SampleNode {

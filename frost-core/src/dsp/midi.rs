@@ -40,6 +40,9 @@ impl MasterClock {
 
     pub fn stop(&mut self) {
         self.is_playing = false;
+    }
+
+    pub fn reset(&mut self) {
         self.current_tick = 0;
         self.tick_accumulator = 0.0;
     }

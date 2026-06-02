@@ -23,6 +23,8 @@ pub struct AudioSample {
     pub data: Arc<Vec<f32>>, // Interleaved float32 data
 }
 
+const MAX_CACHED_SAMPLES: usize = 256;
+
 pub struct SampleBank {
     pub samples: RwLock<HashMap<String, AudioSample>>,
 }
@@ -31,6 +33,18 @@ impl SampleBank {
     pub fn new() -> Self {
         Self {
             samples: RwLock::new(HashMap::new()),
+        }
+    }
+
+    fn evict_if_needed(&self) {
+        let mut samples = self.samples.write();
+        if samples.len() >= MAX_CACHED_SAMPLES {
+            // Remove 20% of oldest entries
+            let to_remove = samples.len() / 5;
+            let keys: Vec<String> = samples.keys().take(to_remove).cloned().collect();
+            for key in keys {
+                samples.remove(&key);
+            }
         }
     }
 
@@ -116,7 +130,8 @@ impl SampleBank {
             data: Arc::new(float_data),
         };
 
-        // Cache the sample
+        // Cache the sample (with LRU-like eviction)
+        self.evict_if_needed();
         self.samples.write().insert(file_path.to_string(), sample.clone());
 
         Ok(sample)

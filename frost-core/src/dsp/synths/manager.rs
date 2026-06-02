@@ -26,6 +26,7 @@ pub struct SynthManager {
     eruption: EruptionSynth,
     nebula: NebulaSynth,
     sampler: SamplerSynth,
+    active_notes: Vec<u8>, // Voice stack for note-off tracking
 }
 
 impl SynthManager {
@@ -36,6 +37,7 @@ impl SynthManager {
             eruption: EruptionSynth::new(sample_rate),
             nebula: NebulaSynth::new(sample_rate),
             sampler: SamplerSynth::new(sample_rate),
+            active_notes: Vec::with_capacity(16),
         }
     }
 
@@ -44,6 +46,11 @@ impl SynthManager {
     }
 
     pub fn note_on(&mut self, pitch: u8, velocity: f32) {
+        // Push to voice stack (last-note priority)
+        if let Some(pos) = self.active_notes.iter().position(|&n| n == pitch) {
+            self.active_notes.remove(pos);
+        }
+        self.active_notes.push(pitch);
         match self.active_type {
             SynthType::Summit => self.summit.trigger_on(pitch, velocity),
             SynthType::Eruption => self.eruption.trigger_on(pitch, velocity),
@@ -52,7 +59,14 @@ impl SynthManager {
         }
     }
 
-    pub fn note_off(&mut self, _pitch: u8) {
+    pub fn note_off(&mut self, pitch: u8) {
+        // Remove from voice stack; only release if no notes remain
+        if let Some(pos) = self.active_notes.iter().position(|&n| n == pitch) {
+            self.active_notes.remove(pos);
+        }
+        if !self.active_notes.is_empty() {
+            return;
+        }
         match self.active_type {
             SynthType::Summit => self.summit.trigger_off(),
             SynthType::Eruption => self.eruption.trigger_off(),

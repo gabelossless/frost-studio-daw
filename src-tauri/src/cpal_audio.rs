@@ -1,5 +1,6 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use crate::MixerState;
 
 pub fn get_available_hosts() -> Vec<String> {
@@ -85,7 +86,7 @@ fn run<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
     let stream = device.build_output_stream(
         config,
         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            if let Ok(mut mixer) = mixer_state.try_lock() {
+            if let Some(mut mixer) = mixer_state.try_lock() {
                 let is_playing = mixer.clock.is_playing;
                 for frame in data.chunks_mut(channels) {
                     let (out_l, out_r) = if is_playing {

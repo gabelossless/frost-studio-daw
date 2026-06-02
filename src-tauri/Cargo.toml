@@ -25,6 +25,7 @@ raw-window-handle = "0.5"
 cpal = { workspace = true }
 ringbuf = { workspace = true }
 frost-core = { path = "../frost-core" }
+parking_lot = "0.12"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = [

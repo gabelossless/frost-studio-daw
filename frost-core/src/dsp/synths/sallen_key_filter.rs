@@ -26,7 +26,8 @@ impl SallenKeyFilter {
 
     #[inline(always)]
     pub fn process(&mut self, x: f32) -> f32 {
-        let alpha = (2.0 * std::f32::consts::PI * self.cutoff / self.sample_rate).tan();
+        let cutoff = self.cutoff.min(self.sample_rate * 0.45);
+        let alpha = (2.0 * std::f32::consts::PI * cutoff / self.sample_rate).tan();
         let k = 2.0 * self.res;
         
         // Basic 12dB Sallen-Key approximation

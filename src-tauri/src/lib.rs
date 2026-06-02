@@ -1,11 +1,11 @@
 mod cpal_audio;
 
-use frost_core::dsp::mixer::{ChannelParams, MasterBus, MeterLevel, MixerChannel};
-use frost_core::dsp::synth::{Waveform};
+use frost_core::dsp::mixer::{ChannelParams, MeterLevel};
 use frost_core::dsp::synths::manager::{SynthManager, SynthParams, SynthType};
-use frost_core::dsp::midi::{MasterClock, MidiPlaylist, NoteEvent};
+use frost_core::dsp::midi::{NoteEvent};
 use frost_core::dsp::exporter::Exporter;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use tauri::{AppHandle, Emitter, State};
 use std::path::{PathBuf};
 
@@ -27,7 +27,7 @@ fn set_channel_params(
     state: State<'_, SharedMixer>,
     params: ChannelParams,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     let id = params.channel_id;
     if id < NUM_CHANNELS {
         mixer.channels[id].apply_params(params);
@@ -43,7 +43,7 @@ fn set_master_volume(
     state: State<'_, SharedMixer>,
     volume: f32,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     mixer.master.volume = volume.clamp(0.0, 1.5);
     Ok(())
 }
@@ -56,7 +56,7 @@ fn set_master_limiter_params(
     attack_ms: f32,
     release_ms: f32,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     mixer.master.set_limiter_params(threshold, ceiling, attack_ms, release_ms);
     Ok(())
 }
@@ -68,7 +68,7 @@ fn trigger_note_on(
     velocity: u8,
     state: State<'_, SharedMixer>,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     if let Some(synth) = mixer.synths.get_mut(channel_id) {
         synth.note_on(note, velocity as f32 / 127.0);
         Ok(())
@@ -83,7 +83,7 @@ fn trigger_note_off(
     note: u8,
     state: State<'_, SharedMixer>,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     if let Some(synth) = mixer.synths.get_mut(channel_id) {
         synth.note_off(note);
         Ok(())
@@ -97,7 +97,7 @@ async fn sync_midi_data(
     notes: Vec<NoteEvent>,
     state: State<'_, SharedMixer>,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     mixer.playlist.update(notes);
     // Reset cursor when playlist changes
     mixer.next_note_index = 0;
@@ -110,7 +110,7 @@ fn set_tempo(
     state: State<'_, SharedMixer>,
     tempo: f32,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     mixer.clock.set_bpm(tempo);
     Ok(())
 }
@@ -120,7 +120,7 @@ fn set_synth_params(
     state: State<'_, SharedMixer>,
     params: SynthParams,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     for synth in mixer.synths.iter_mut() {
         synth.set_params(params);
     }
@@ -133,7 +133,7 @@ fn set_synth_type(
     synth_type: String,
     state: State<'_, SharedMixer>,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     let stype = match synth_type.as_str() {
         "Summit" => SynthType::Summit,
         "Eruption" => SynthType::Eruption,
@@ -155,7 +155,7 @@ async fn set_transport(
     playing: bool,
     state: State<'_, SharedMixer>,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     if playing {
         mixer.clock.start();
     } else {
@@ -173,15 +173,15 @@ async fn set_transport(
 
 /// Get the current meter levels for all channels + master.
 #[tauri::command]
-fn get_meter_levels(state: State<'_, SharedMixer>) -> Result<Vec<MeterLevel>, String> {
-    let mixer = state.lock().map_err(|e| e.to_string())?;
+fn get_meter_levels(state: State<'_, SharedMixer>) -> Vec<MeterLevel> {
+    let mixer = state.lock();
     let mut levels: Vec<MeterLevel> = mixer
         .channels
         .iter()
         .map(|ch| ch.get_meter())
         .collect();
     levels.push(mixer.master.get_meter());
-    Ok(levels)
+    levels
 }
 
 #[tauri::command]
@@ -189,7 +189,7 @@ fn process_audio_tick(
     state: State<'_, SharedMixer>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let mixer = state.lock().map_err(|e| e.to_string())?;
+    let mixer = state.lock();
     let playhead = mixer.clock.get_position_beats();
 
     // Emitting meter levels that are continuously updated by the native cpal audio thread
@@ -227,7 +227,7 @@ fn get_available_vst3_plugins() -> Vec<VstPluginInfo> {
 
 #[tauri::command]
 fn get_synth_presets(synth_type: String, state: State<'_, SharedMixer>) -> Result<Vec<SynthPreset>, String> {
-    let mixer = state.lock().map_err(|e| e.to_string())?;
+    let mixer = state.lock();
     match synth_type.as_str() {
         "Summit" => Ok(mixer.synth_bank.summit_presets.clone()),
         "Eruption" => Ok(mixer.synth_bank.eruption_presets.clone()),
@@ -238,7 +238,7 @@ fn get_synth_presets(synth_type: String, state: State<'_, SharedMixer>) -> Resul
 
 #[tauri::command]
 fn add_native_plugin(channel_id: usize, plugin_type: String, state: State<'_, SharedMixer>) -> Result<Vec<String>, String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     let channel = mixer.channels.get_mut(channel_id).ok_or("Invalid channel ID")?;
     
     let plugin: Box<dyn AudioPlugin> = match plugin_type.as_str() {
@@ -259,7 +259,7 @@ fn add_native_plugin(channel_id: usize, plugin_type: String, state: State<'_, Sh
 
 #[tauri::command]
 fn remove_native_plugin(channel_id: usize, index: usize, state: State<'_, SharedMixer>) -> Result<Vec<String>, String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     let channel = mixer.channels.get_mut(channel_id).ok_or("Invalid channel ID")?;
     if index < channel.inserts.len() {
         channel.inserts.remove(index);
@@ -270,7 +270,7 @@ fn remove_native_plugin(channel_id: usize, index: usize, state: State<'_, Shared
 
 #[tauri::command]
 fn get_plugins(channel_id: usize, state: State<'_, SharedMixer>) -> Result<Vec<String>, String> {
-    let mixer = state.lock().map_err(|e| e.to_string())?;
+    let mixer = state.lock();
     let channel = mixer.channels.get(channel_id).ok_or("Invalid channel ID")?;
     let names = channel.inserts.iter().map(|p| p.name().to_string()).collect();
     Ok(names)
@@ -278,7 +278,7 @@ fn get_plugins(channel_id: usize, state: State<'_, SharedMixer>) -> Result<Vec<S
 
 #[tauri::command]
 fn set_plugin_param(channel_id: usize, plugin_index: usize, param_id: u32, value: f32, state: State<'_, SharedMixer>) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     let channel = mixer.channels.get_mut(channel_id).ok_or("Invalid channel ID")?;
     let plugin = channel.inserts.get_mut(plugin_index).ok_or("Invalid plugin index")?;
     plugin.set_param(param_id, value);
@@ -350,7 +350,7 @@ fn preview_sample(_path: String, _state: State<'_, SharedMixer>) -> Result<(), S
 
 #[tauri::command]
 fn set_sampler_sample(channel_id: usize, path: String, state: State<'_, SharedMixer>) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     if let Some(synth) = mixer.synths.get_mut(channel_id) {
         synth.set_sampler_sample(path);
         Ok(())
@@ -361,7 +361,7 @@ fn set_sampler_sample(channel_id: usize, path: String, state: State<'_, SharedMi
 
 #[tauri::command]
 fn sync_audio_tracks(tracks: Vec<AudioTrack>, state: State<'_, SharedMixer>) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     mixer.audio_tracks = tracks;
     Ok(())
 }
@@ -393,7 +393,7 @@ async fn export_project(
     duration_beats: f32,
     state: State<'_, SharedMixer>,
 ) -> Result<(), String> {
-    let mut mixer = state.lock().map_err(|e| e.to_string())?;
+    let mut mixer = state.lock();
     Exporter::export_to_wav(&mut mixer, &path, duration_beats)
 }
 
@@ -416,6 +416,17 @@ pub struct AudioEngineState {
     pub buffer_size: Mutex<Option<u32>>,
 }
 
+impl AudioEngineState {
+    pub fn new(tx: std::sync::mpsc::Sender<AudioMessage>) -> Self {
+        Self {
+            tx: Mutex::new(tx),
+            current_host: Mutex::new("Default".to_string()),
+            current_device: Mutex::new("Default".to_string()),
+            buffer_size: Mutex::new(None),
+        }
+    }
+}
+
 #[tauri::command]
 fn get_audio_hosts() -> Vec<String> {
     cpal_audio::get_available_hosts()
@@ -433,7 +444,7 @@ fn set_audio_device(
     buffer_size: Option<u32>,
     engine_state: State<'_, AudioEngineState>,
 ) -> Result<(), String> {
-    let tx = engine_state.tx.lock().map_err(|e| e.to_string())?;
+    let tx = engine_state.tx.lock();
     
     tx.send(AudioMessage::SetDevice {
         host: host.clone(),
@@ -441,9 +452,9 @@ fn set_audio_device(
         buffer_size,
     }).map_err(|e| e.to_string())?;
 
-    if let Ok(mut h) = engine_state.current_host.lock() { *h = host; }
-    if let Ok(mut d) = engine_state.current_device.lock() { *d = device; }
-    if let Ok(mut b) = engine_state.buffer_size.lock() { *b = buffer_size; }
+    *engine_state.current_host.lock() = host;
+    *engine_state.current_device.lock() = device;
+    *engine_state.buffer_size.lock() = buffer_size;
 
     Ok(())
 }
@@ -485,12 +496,7 @@ pub fn run() {
         }
     });
 
-    let engine_state = AudioEngineState {
-        tx: Mutex::new(tx),
-        current_host: Mutex::new("Default".to_string()),
-        current_device: Mutex::new("Default".to_string()),
-        buffer_size: Mutex::new(None),
-    };
+    let engine_state = AudioEngineState::new(tx);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

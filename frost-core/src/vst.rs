@@ -40,8 +40,27 @@ pub fn scan_vst3_plugins() -> Vec<VstPluginInfo> {
         PathBuf::from(r"C:\Program Files (x86)\Common Files\VST3"),
     ];
 
-    #[cfg(not(windows))]
-    let vst3_paths: Vec<PathBuf> = vec![]; // Placeholder for macOS/Linux for now
+    #[cfg(target_os = "macos")]
+    let vst3_paths = vec![
+        PathBuf::from("/Library/Audio/Plug-Ins/VST3"),
+        {
+            let home = std::env::var("HOME").unwrap_or_default();
+            PathBuf::from(home + "/Library/Audio/Plug-Ins/VST3")
+        },
+    ];
+
+    #[cfg(target_os = "linux")]
+    let vst3_paths = vec![
+        PathBuf::from("/usr/lib/vst3"),
+        PathBuf::from("/usr/local/lib/vst3"),
+        {
+            let home = std::env::var("HOME").unwrap_or_default();
+            PathBuf::from(home + "/.vst3")
+        },
+    ];
+
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    let vst3_paths: Vec<PathBuf> = vec![];
 
     for base_path in vst3_paths {
         if !base_path.exists() {
