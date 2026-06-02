@@ -52,7 +52,7 @@ For other distros, see [Tauri v2 Linux dependencies](https://v2.tauri.app/start/
 ### 1. Clone or copy the source
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/frost-studio-daw
+git clone https://github.com/gabelossless/frost-studio-daw
 cd frost-studio-daw
 ```
 
@@ -104,6 +104,6 @@ This starts the Vite dev server on port 3001 and a Tauri dev window with hot-rel
 
 ## CI/CD Builds
 
-Pre-built installers are available as GitHub Actions artifacts for each release. See the [Actions tab](https://github.com/YOUR_USERNAME/frost-studio-daw/actions) to download the latest build for your platform.
+Pre-built installers are available as GitHub Actions artifacts for each release. See the [Actions tab](https://github.com/gabelossless/frost-studio-daw/actions) to download the latest build for your platform.
 
 Builds are still **unsigned** — they come from a public CI runner, not a trusted certificate authority. Your OS may still warn you. Building from source is the only way to get a fully trusted binary without paying for code signing.

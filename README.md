@@ -33,7 +33,7 @@ A high-performance digital audio workstation built with Tauri v2, Rust, and Reac
 
 ```bash
 # Install prerequisites: Rust, Node.js
-git clone https://github.com/YOUR_USERNAME/frost-studio-daw
+git clone https://github.com/gabelossless/frost-studio-daw
 cd frost-studio-daw
 npm install
 npm run tauri build
