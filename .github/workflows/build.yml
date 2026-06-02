@@ -1,0 +1,105 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle: msi
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundle: deb
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundle: dmg
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            frost-core -> target
+            vst/compressor -> target
+            vst/eq -> target
+            vst/limiter -> target
+            vst/bass -> target
+            vst/delay -> target
+            vst/reverb -> target
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libxdo-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          # macOS runners already have Xcode CLT
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> $GITHUB_ENV
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Rust check
+        run: cargo check --workspace
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          includeDebug: false
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frost-studio-daw-${{ runner.os }}-${{ github.sha }}
+          path: src-tauri/target/release/bundle/${{ matrix.bundle }}/
+          if-no-files-found: warn
+          retention-days: 30

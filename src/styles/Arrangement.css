@@ -1,0 +1,139 @@
+.arrangement-clip {
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    border-radius: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    cursor: grab;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    transition: filter 0.2s, transform 0.1s;
+}
+
+.arrangement-clip:active {
+    cursor: grabbing;
+    transform: scale(0.99);
+}
+
+.arrangement-clip:hover {
+    filter: brightness(1.1);
+}
+
+.arrangement-grid-container {
+    position: relative;
+    flex: 1;
+    width: var(--timeline-width);
+    min-height: var(--timeline-height);
+}
+
+.arrangement-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #22d3ee;
+    z-index: 30;
+    box-shadow: 0 0 15px rgba(34, 211, 238, 0.6);
+    pointer-events: none;
+    transition: left 0.03s linear;
+    left: var(--playhead-left);
+}
+
+.arrangement-grid-vertical-lines {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    pointer-events: none;
+}
+
+.arrangement-grid-line {
+    height: 100%;
+    width: var(--beat-width);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.arrangement-grid-line-bar {
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.arrangement-ruler-beat {
+    flex-shrink: 0;
+    border-right: 1px solid rgba(39, 39, 42, 0.4);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding-bottom: 0.25rem;
+    width: var(--beat-width);
+}
+
+.arrangement-lane {
+    height: 5rem;
+    border-bottom: 1px solid rgba(39, 39, 42, 0.2);
+    position: relative;
+    transition: background-color 0.2s;
+}
+
+.arrangement-lane:hover {
+    background-color: rgba(255, 255, 255, 0.01);
+}
+
+.arrangement-clip {
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    border-radius: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    cursor: grab;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    transition: filter 0.2s, transform 0.1s;
+    left: var(--clip-left);
+    width: var(--clip-width);
+}
+
+.export-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background-color: rgba(0, 0, 0, 0.8);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+}
+
+.export-progress-bar-container {
+    width: 100%;
+    height: 0.5rem;
+    background-color: rgba(0, 0, 0, 0.4);
+    border-radius: 9999px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.export-progress-bar-fill {
+    height: 100%;
+    background-color: #6366f1;
+    transition: width 0.3s;
+}
+
+.arrangement-midi-note-bar {
+    height: 2px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 9999px;
+    width: var(--midi-bar-width);
+    margin-left: var(--midi-bar-margin);
+}

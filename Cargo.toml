@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "src-tauri",
+    "vst/compressor",
+    "vst/eq",
+    "vst/limiter",
+    "vst/bass",
+    "vst/delay",
+    "vst/reverb",
+    "frost-core"
+]
+
+[workspace.dependencies]
+symphonia = { version = "0.5", features = ["wav", "mp3"] }
+parking_lot = "0.12"
+cpal = "0.15.2"
+ringbuf = "0.3.3"
+lazy_static = "1.4.0"

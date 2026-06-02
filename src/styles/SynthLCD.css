@@ -1,0 +1,7 @@
+.synth-lcd-bar {
+    flex: 1;
+    background-color: rgba(99, 102, 241, 0.2);
+    border-top: 1px solid rgba(129, 140, 248, 1);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+    transition: height 0.1s ease-out;
+}

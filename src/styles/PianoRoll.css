@@ -1,0 +1,37 @@
+.piano-roll-grid {
+    width: var(--grid-width);
+    height: var(--grid-height);
+    background:
+        linear-gradient(90deg, rgba(39, 39, 42, 0.3) 1px, transparent 1px),
+        linear-gradient(rgba(39, 39, 42, 0.3) 1px, transparent 1px);
+    background-size: var(--cell-width) var(--cell-height);
+    position: relative;
+}
+
+.piano-roll-note {
+    position: absolute;
+    left: var(--note-left);
+    top: var(--note-top);
+    width: var(--note-width);
+    height: var(--note-height);
+    background-color: rgb(99, 102, 241);
+    /* indigo-500 */
+    border: 1px solid rgba(99, 102, 241, 0.5);
+    border-radius: 0.125rem;
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+    cursor: move;
+    z-index: 10;
+}
+
+.piano-roll-note-resizer {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    cursor: ew-resize;
+}
+
+.piano-roll-note-resizer:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
