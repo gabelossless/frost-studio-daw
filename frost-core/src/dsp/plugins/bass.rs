@@ -8,7 +8,6 @@ pub struct BassSynthPlugin {
     sub_osc: WavetableOscillator,
     filter: LadderFilter,
     env: AdsrEnvelope,
-    sample_rate: f32,
     active: bool,
     note_freq: f32,
 }
@@ -25,7 +24,6 @@ impl BassSynthPlugin {
             sub_osc: sub,
             filter: LadderFilter::new(sample_rate),
             env: AdsrEnvelope::new(sample_rate),
-            sample_rate,
             active: false,
             note_freq: 440.0,
         }

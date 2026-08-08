@@ -10,7 +10,6 @@ pub struct Reverb {
     // Params
     room_size: f32,
     damping: f32,
-    width: f32,
     mix: f32,
 }
 
@@ -62,7 +61,6 @@ impl Reverb {
             allpasses_r: vec![AllPassFilter::new(556+23), AllPassFilter::new(441+23)],
             room_size: 0.7,
             damping: 0.2,
-            width: 1.0,
             mix: 0.3,
         };
         slf.update_params();

@@ -472,24 +472,24 @@ pub fn run() {
 
     // Spawn background thread to OWN the audio stream (bypassing Send/Sync issues with Stream)
     std::thread::spawn(move || {
-        let mut current_stream: Option<cpal::Stream> = None;
+        let mut _current_stream: Option<cpal::Stream> = None;
         
         // Start initial stream
         if let Ok(s) = cpal_audio::start_audio_engine(Arc::clone(&mixer_state_clone), None, None, None) {
-             current_stream = Some(s);
+             _current_stream = Some(s);
         }
         
         while let Ok(msg) = rx.recv() {
             match msg {
                 AudioMessage::SetDevice { host, device, buffer_size } => {
-                    current_stream = None; // Drops stream, stopping audio
+                    _current_stream = None; // Drops stream, stopping audio
                     if let Ok(s) = cpal_audio::start_audio_engine(
                         Arc::clone(&mixer_state_clone),
                         Some(&host),
                         Some(&device),
                         buffer_size
                     ) {
-                        current_stream = Some(s);
+                        _current_stream = Some(s);
                     }
                 }
             }

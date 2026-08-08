@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 members = [
     "src-tauri",
     "vst/compressor",
@@ -16,3 +17,15 @@ parking_lot = "0.12"
 cpal = "0.15.2"
 ringbuf = "0.3.3"
 lazy_static = "1.4.0"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"

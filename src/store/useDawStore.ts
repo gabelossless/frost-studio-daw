@@ -570,7 +570,7 @@ export const useDawStore = create<DawState>()(
                             handlers.push({ input: device, handler });
                         }
                         midiAccessCleanup = () => {
-                            for (const { input, handler } of handlers) {
+                            for (const { input } of handlers) {
                                 input.onmidimessage = null;
                             }
                         };

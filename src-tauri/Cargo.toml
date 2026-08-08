@@ -34,10 +34,3 @@ windows = { version = "0.52", features = [
     "Win32_System_LibraryLoader",
     "Win32_Graphics_Gdi"
 ] }
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
