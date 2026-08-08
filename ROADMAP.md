@@ -48,9 +48,9 @@ Legend:
 | Audio track editing | 🚧 | Clipping, trimming, fades in the Arrangement view |
 | Sampler multi-sample support | ⬜ | Velocity layers + round-robin |
 | Sample preview bus | ⬜ | `preview_sample` is currently a no-op in `lib.rs` |
-| Preset file loading at runtime | ⬜ | Load `src-tauri/presets/**` JSON instead of only in-memory bank |
+| Preset file loading at runtime | ✅ | `get_synth_presets` reads `src-tauri/presets/**/*.json`, falls back to the in-memory bank |
 | Tempo & time-signature automation | ⬜ | Beat-mapped transport changes |
-| Sample-rate agnostic engine | ⬜ | Replace hardcoded 44100 Hz with the device's actual rate |
+| Sample-rate agnostic engine | ✅ | `MixerState` tracks the device sample rate; DSP rebuilds via `set_sample_rate` |
 | MIDI recording from a keyboard | ⬜ | `isRecording` flag exists in state; wire capture path |
 | Metronome | ⬜ | `metronomeEnabled` flag exists; needs click source |
 

@@ -48,17 +48,29 @@ Add effects from the **Plugin Insert** panel on any channel. Effects process in
 order top-to-bottom.
 
 ## 2. Preset Management
-Each synth comes with **50 factory presets** defined in `frost-core/src/dsp/presets.rs`. Corresponding JSON presets are also generated into `src-tauri/presets/` by the build script.
+Each synth comes with **50 factory presets** defined in `frost-core/src/dsp/presets.rs`.
+Corresponding JSON presets live in `src-tauri/presets/{summit,eruption,nebula}/` and
+are loaded at runtime by the engine (`get_synth_presets`), with the in-memory bank
+as a fallback.
 
 ### Adding Your Own Presets
-1. Edit `frost-core/src/dsp/presets.rs` to add new entries to `init_summit()`, `init_eruption()`, or `init_nebula()`.
-2. Alternatively, add a new `.json` file in `src-tauri/presets/[synth_name]/` following the format below, then run `node scripts/generate_presets.cjs` to regenerate.
+1. Add a new `.json` file in `src-tauri/presets/[synth_name]/` following the
+   format below, then run `node scripts/generate_presets.cjs` to regenerate the
+   bank (or just drop the file in — the loader scans the directory at runtime).
+2. Optionally add entries to `init_summit()`, `init_eruption()`, or `init_nebula()`
+   in `frost-core/src/dsp/presets.rs` for the in-memory fallback bank.
 3. Use the following parameter structure:
 ```json
 {
   "name": "My Lead",
   "category": "Lead",
-  "params": [0.05, 0.2, 0.7, 0.4]
+  "cutoff": 0.5,
+  "resonance": 0.3,
+  "attack": 0.05,
+  "decay": 0.2,
+  "sustain": 0.7,
+  "release": 0.4,
+  "osc_mix": 0.5
 }
 ```
 

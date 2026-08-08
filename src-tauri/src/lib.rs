@@ -163,9 +163,10 @@ async fn set_transport(
         // Reset MIDI state
         mixer.next_note_index = 0;
         mixer.active_notes.clear();
-        // Reset all synth states
+        // Reset all synth states at the engine's sample rate
+        let sr = mixer.sample_rate;
         for s in mixer.synths.iter_mut() {
-            *s = SynthManager::new(44100.0);
+            *s = SynthManager::new(sr);
         }
     }
     Ok(())
@@ -227,6 +228,20 @@ fn get_available_vst3_plugins() -> Vec<VstPluginInfo> {
 
 #[tauri::command]
 fn get_synth_presets(synth_type: String, state: State<'_, SharedMixer>) -> Result<Vec<SynthPreset>, String> {
+    // Prefer on-disk presets (src-tauri/presets/<synth>/), falling back to the
+    // in-memory factory bank so the command works even without a source tree.
+    let dir = {
+        let mut p = std::env::current_dir().unwrap_or_default();
+        p.push("src-tauri");
+        p.push("presets");
+        p.push(synth_type.to_lowercase());
+        p
+    };
+    let from_disk = frost_core::dsp::presets::load_presets_from_dir(&dir);
+    if !from_disk.is_empty() {
+        return Ok(from_disk);
+    }
+
     let mixer = state.lock();
     match synth_type.as_str() {
         "Summit" => Ok(mixer.synth_bank.summit_presets.clone()),
@@ -239,15 +254,16 @@ fn get_synth_presets(synth_type: String, state: State<'_, SharedMixer>) -> Resul
 #[tauri::command]
 fn add_native_plugin(channel_id: usize, plugin_type: String, state: State<'_, SharedMixer>) -> Result<Vec<String>, String> {
     let mut mixer = state.lock();
+    let sr = mixer.sample_rate;
     let channel = mixer.channels.get_mut(channel_id).ok_or("Invalid channel ID")?;
     
     let plugin: Box<dyn AudioPlugin> = match plugin_type.as_str() {
-        "Compressor" => Box::new(Compressor::new(44100.0)),
-        "EQ" => Box::new(ParametricEQ::new(44100.0)),
-        "Limiter" => Box::new(FrostLimiter::new(44100.0)),
-        "Bass" => Box::new(BassSynthPlugin::new(44100.0)),
-        "Delay" => Box::new(frost_core::dsp::effects::Delay::new(44100.0)),
-        "Reverb" => Box::new(frost_core::dsp::effects::Reverb::new(44100.0)),
+        "Compressor" => Box::new(Compressor::new(sr)),
+        "EQ" => Box::new(ParametricEQ::new(sr)),
+        "Limiter" => Box::new(FrostLimiter::new(sr)),
+        "Bass" => Box::new(BassSynthPlugin::new(sr)),
+        "Delay" => Box::new(frost_core::dsp::effects::Delay::new(sr)),
+        "Reverb" => Box::new(frost_core::dsp::effects::Reverb::new(sr)),
         "Saturator" | "Distortion" => Box::new(frost_core::dsp::plugins::distortion::DistortionPlugin::new()),
         _ => return Err(format!("Unknown plugin type: {}", plugin_type)),
     };

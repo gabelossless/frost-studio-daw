@@ -60,6 +60,11 @@ pub fn start_audio_engine(
         config.buffer_size = cpal::BufferSize::Default;
     }
 
+    // Rebuild the engine's DSP at the device's actual sample rate.
+    if let Some(mut mixer) = mixer.try_lock() {
+        mixer.set_sample_rate(config.sample_rate.0 as f32);
+    }
+
     println!("Starting CPAL audio engine. Host: {:?}, Device: {}, Config: {:?}", host.id(), device.name().unwrap_or_default(), config);
 
     let sample_format = default_config.sample_format();

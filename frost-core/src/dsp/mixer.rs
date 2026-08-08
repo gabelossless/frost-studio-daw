@@ -10,7 +10,7 @@ use super::filter::{BiquadFilter, FilterType};
 use super::limiter::Limiter;
 use serde::{Deserialize, Serialize};
 
-const SAMPLE_RATE: f32 = 44100.0;
+const DEFAULT_SAMPLE_RATE: f32 = 44100.0;
 
 /// EQ band parameters sent from the UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,7 +86,7 @@ pub struct MixerChannel {
     eq_mid_r: BiquadFilter,
     eq_high_l: BiquadFilter,
     eq_high_r: BiquadFilter,
-    // RMS accumulation (over ~20ms window at 44100 Hz = ~882 samples)
+    // RMS accumulation (over ~20ms window)
     rms_accum_l: f32,
     rms_accum_r: f32,
     rms_count: usize,
@@ -103,21 +103,22 @@ pub struct MixerChannel {
 }
 
 impl MixerChannel {
-    pub fn new(channel_id: usize) -> Self {
+    pub fn new(channel_id: usize, sample_rate: f32) -> Self {
         let mut params = ChannelParams::default();
         params.channel_id = channel_id;
+        let rms_window = (sample_rate * 0.02) as usize; // ~20ms window
         Self {
-            eq_low_l: BiquadFilter::new(FilterType::LowShelf, 100.0, 0.0, 0.707, SAMPLE_RATE),
-            eq_low_r: BiquadFilter::new(FilterType::LowShelf, 100.0, 0.0, 0.707, SAMPLE_RATE),
-            eq_mid_l: BiquadFilter::new(FilterType::Peaking, 1000.0, 0.0, 0.707, SAMPLE_RATE),
-            eq_mid_r: BiquadFilter::new(FilterType::Peaking, 1000.0, 0.0, 0.707, SAMPLE_RATE),
-            eq_high_l: BiquadFilter::new(FilterType::HighShelf, 8000.0, 0.0, 0.707, SAMPLE_RATE),
-            eq_high_r: BiquadFilter::new(FilterType::HighShelf, 8000.0, 0.0, 0.707, SAMPLE_RATE),
+            eq_low_l: BiquadFilter::new(FilterType::LowShelf, 100.0, 0.0, 0.707, sample_rate),
+            eq_low_r: BiquadFilter::new(FilterType::LowShelf, 100.0, 0.0, 0.707, sample_rate),
+            eq_mid_l: BiquadFilter::new(FilterType::Peaking, 1000.0, 0.0, 0.707, sample_rate),
+            eq_mid_r: BiquadFilter::new(FilterType::Peaking, 1000.0, 0.0, 0.707, sample_rate),
+            eq_high_l: BiquadFilter::new(FilterType::HighShelf, 8000.0, 0.0, 0.707, sample_rate),
+            eq_high_r: BiquadFilter::new(FilterType::HighShelf, 8000.0, 0.0, 0.707, sample_rate),
             params,
             rms_accum_l: 0.0,
             rms_accum_r: 0.0,
             rms_count: 0,
-            rms_window: 882, // ~20ms at 44100 Hz
+            rms_window,
             rms_left: 0.0,
             rms_right: 0.0,
             peak_left: 0.0,
@@ -248,22 +249,24 @@ pub struct MasterBus {
     pub peak_right: f32,
     peak_decay: f32,
     pub limiter: Limiter,
+    sample_rate: f32,
 }
 
 impl MasterBus {
-    pub fn new() -> Self {
+    pub fn new(sample_rate: f32) -> Self {
         Self {
             volume: 1.0,
             rms_accum_l: 0.0,
             rms_accum_r: 0.0,
             rms_count: 0,
-            rms_window: 882,
+            rms_window: (sample_rate * 0.02) as usize,
             rms_left: 0.0,
             rms_right: 0.0,
             peak_left: 0.0,
             peak_right: 0.0,
             peak_decay: 0.9995,
-            limiter: Limiter::new(44100.0),
+            limiter: Limiter::new(sample_rate),
+            sample_rate,
         }
     }
 
@@ -308,15 +311,13 @@ impl MasterBus {
     }
 
     pub fn set_limiter_params(&mut self, threshold: f32, ceiling: f32, attack_ms: f32, release_ms: f32) {
-        // We'll use a fixed sample rate of 44100.0 for now, 
-        // in a real app we'd pass the actual sample rate.
-        self.limiter.set_params(threshold, ceiling, attack_ms, release_ms, 44100.0);
+        self.limiter.set_params(threshold, ceiling, attack_ms, release_ms, self.sample_rate);
     }
 }
 
 impl Default for MasterBus {
     fn default() -> Self {
-        Self::new()
+        Self::new(DEFAULT_SAMPLE_RATE)
     }
 }
 
@@ -326,7 +327,7 @@ mod tests {
 
     #[test]
     fn test_channel_mute() {
-        let mut ch = MixerChannel::new(0);
+        let mut ch = MixerChannel::new(0, DEFAULT_SAMPLE_RATE);
         ch.params.muted = true;
         let ((l, r), _, _) = ch.process(1.0, 1.0, 0.0);
         assert_eq!(l, 0.0);
@@ -335,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_center_pan_equal_power() {
-        let mut ch = MixerChannel::new(0);
+        let mut ch = MixerChannel::new(0, DEFAULT_SAMPLE_RATE);
         ch.params.pan = 0.0;
         ch.params.volume = 1.0;
         let ((l, r), _, _) = ch.process(1.0, 1.0, 0.0);
@@ -347,7 +348,7 @@ mod tests {
 
     #[test]
     fn test_master_bus_gain() {
-        let mut bus = MasterBus::new();
+        let mut bus = MasterBus::new(DEFAULT_SAMPLE_RATE);
         bus.volume = 0.5;
         let (l, r) = bus.process(1.0, 1.0);
         assert!((l - 0.5).abs() < 0.01, "L was {}", l);
@@ -356,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_stereo_discrete_processing() {
-        let mut ch = MixerChannel::new(0);
+        let mut ch = MixerChannel::new(0, DEFAULT_SAMPLE_RATE);
         ch.params.pan = 0.0; // Center pan
         ch.params.volume = 1.0;
         

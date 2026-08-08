@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Runtime preset loading: `get_synth_presets` reads `src-tauri/presets/**/*.json`,
+  falling back to the in-memory factory bank.
+- Sample-rate agnostic engine: `MixerState` tracks the device sample rate and
+  rebuilds all DSP (synths, effects, mixer, clock) via `set_sample_rate`. WAV
+  export now uses the engine's rate.
+
 ### Planned (see [ROADMAP.md](ROADMAP.md))
 - Project save/load (`.frost` files)
 - Audio track editing (trim, fade, clip)
 - Sampler velocity layers and round-robin
-- Runtime preset file loading
-- Sample-rate agnostic audio engine
 - MIDI recording and metronome
 
 ## [0.1.0] - 2026-01-01

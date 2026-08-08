@@ -8,9 +8,10 @@ impl Exporter {
         path: &str,
         duration_beats: f32,
     ) -> Result<(), String> {
+        let sr = mixer_state.sample_rate as u32;
         let spec = hound::WavSpec {
             channels: 2,
-            sample_rate: 44100,
+            sample_rate: sr,
             bits_per_sample: 32,
             sample_format: hound::SampleFormat::Float,
         };
@@ -25,7 +26,7 @@ impl Exporter {
         // Calculate total samples
         // duration_beats * (60 / bpm) * sample_rate
         let bpm = mixer_state.clock.bpm;
-        let total_samples = (duration_beats * (60.0 / bpm) * 44100.0) as usize;
+        let total_samples = (duration_beats * (60.0 / bpm) * mixer_state.sample_rate) as usize;
 
         for _ in 0..total_samples {
             let (l, r) = mixer_state.generate_frame();

@@ -4,7 +4,7 @@ use super::nebula::NebulaSynth;
 use super::sampler::SamplerSynth;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SynthType {
     Summit,   // Moog
     Eruption, // Korg
@@ -43,6 +43,10 @@ impl SynthManager {
 
     pub fn set_type(&mut self, synth_type: SynthType) {
         self.active_type = synth_type;
+    }
+
+    pub fn active_type(&self) -> SynthType {
+        self.active_type
     }
 
     pub fn note_on(&mut self, pitch: u8, velocity: f32) {

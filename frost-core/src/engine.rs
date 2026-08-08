@@ -25,26 +25,58 @@ pub struct MixerState {
     pub sim_levels: Vec<(f32, f32)>,
     pub synth_bank: SynthBank,
     pub audio_tracks: Vec<AudioTrack>,
+    pub sample_rate: f32,
 }
 
 impl MixerState {
     pub fn new() -> Self {
-        let channels: Vec<MixerChannel> = (0..NUM_CHANNELS).map(MixerChannel::new).collect();
-        let synths = (0..NUM_CHANNELS).map(|_| SynthManager::new(44100.0)).collect();
+        Self::with_sample_rate(44100.0)
+    }
+
+    pub fn with_sample_rate(sample_rate: f32) -> Self {
+        let channels: Vec<MixerChannel> = (0..NUM_CHANNELS).map(|i| MixerChannel::new(i, sample_rate)).collect();
+        let synths = (0..NUM_CHANNELS).map(|_| SynthManager::new(sample_rate)).collect();
         Self {
             channels,
-            master: MasterBus::new(),
-            reverb: Reverb::new(44100.0),
-            delay: Delay::new(44100.0),
+            master: MasterBus::new(sample_rate),
+            reverb: Reverb::new(sample_rate),
+            delay: Delay::new(sample_rate),
             synths,
-            clock: MasterClock::new(44100.0, 120.0),
+            clock: MasterClock::new(sample_rate, 120.0),
             playlist: MidiPlaylist::new(),
             next_note_index: 0,
             active_notes: Vec::with_capacity(1024),
             sim_levels: vec![(0.0, 0.0); NUM_CHANNELS],
             synth_bank: SynthBank::new(),
             audio_tracks: (0..4).map(|i| AudioTrack::new(i, i % NUM_CHANNELS)).collect(),
+            sample_rate,
         }
+    }
+
+    /// Rebuild all sample-rate-dependent DSP at a new rate. Preserves user
+    /// state (channel params, synth types, playlist, audio tracks, bank).
+    pub fn set_sample_rate(&mut self, new_rate: f32) {
+        if (new_rate - self.sample_rate).abs() < 0.5 {
+            return;
+        }
+        let channel_params: Vec<_> = self.channels.iter().map(|c| c.params.clone()).collect();
+        let synth_types: Vec<_> = self.synths.iter().map(|s| s.active_type()).collect();
+        let mut rebuilt = Self::with_sample_rate(new_rate);
+        rebuilt.playlist = std::mem::replace(&mut self.playlist, MidiPlaylist::new());
+        rebuilt.audio_tracks = std::mem::replace(&mut self.audio_tracks, Vec::new());
+        rebuilt.synth_bank = std::mem::replace(&mut self.synth_bank, SynthBank::new());
+        for (i, ch) in rebuilt.channels.iter_mut().enumerate() {
+            if let Some(p) = channel_params.get(i) {
+                ch.params = p.clone();
+                ch.apply_params(p.clone());
+            }
+        }
+        for (i, s) in rebuilt.synths.iter_mut().enumerate() {
+            if let Some(t) = synth_types.get(i) {
+                s.set_type(*t);
+            }
+        }
+        *self = rebuilt;
     }
 
     pub fn generate_frame(&mut self) -> (f32, f32) {
@@ -172,4 +204,45 @@ pub fn scan_dir_recursive(path: &Path) -> Option<Vec<SampleNode>> {
         }
     }
     Some(nodes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dsp::synths::manager::SynthType;
+
+    #[test]
+    fn new_defaults_to_44100() {
+        let m = MixerState::new();
+        assert_eq!(m.sample_rate, 44100.0);
+    }
+
+    #[test]
+    fn with_sample_rate_uses_provided_rate() {
+        let m = MixerState::with_sample_rate(48000.0);
+        assert_eq!(m.sample_rate, 48000.0);
+        assert_eq!(m.clock.sample_rate, 48000.0);
+    }
+
+    #[test]
+    fn set_sample_rate_rebuilds_dsp_and_preserves_state() {
+        let mut m = MixerState::with_sample_rate(44100.0);
+        m.channels[0].params.volume = 0.5;
+        m.synths[0].set_type(SynthType::Eruption);
+
+        m.set_sample_rate(96000.0);
+
+        assert_eq!(m.sample_rate, 96000.0);
+        assert_eq!(m.clock.sample_rate, 96000.0);
+        // User state survives the rebuild
+        assert_eq!(m.channels[0].params.volume, 0.5);
+        assert_eq!(m.synths[0].active_type(), SynthType::Eruption);
+    }
+
+    #[test]
+    fn set_sample_rate_ignores_small_deltas() {
+        let mut m = MixerState::with_sample_rate(44100.0);
+        m.set_sample_rate(44100.0);
+        assert_eq!(m.sample_rate, 44100.0);
+    }
 }

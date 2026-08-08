@@ -199,9 +199,8 @@ these warnings but is optional for development and open-source distribution.
 - **No sound / underruns (clicks and pops)**
   1. Check the audio device selection in the Audio Settings modal.
   2. Try a larger buffer size.
-  3. Confirm the sample rate of the device matches expectations — the engine
-     currently assumes 44100 Hz (a v0.2.0 roadmap item is sample-rate
-     independence).
+  3. Confirm the audio device and buffer size settings in the Audio Settings
+     modal. The engine adapts to the device's sample rate automatically.
   4. Close CPU-heavy applications.
 
 ## Development Mode
