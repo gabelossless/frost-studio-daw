@@ -93,11 +93,11 @@ File: `frost-core/src/dsp/plugins/compressor.rs`
 
 | ID | Param | Default | Range |
 |----|-------|---------|-------|
-| 0 | Threshold | 0.5 | ~0.0–1.0 (amplitude) |
-| 1 | Ratio | 4.0 | ≥1.0 (higher = more reduction) |
-| 2 | Attack (s) | 0.01 | 0.001–0.5 |
-| 3 | Release (s) | 0.1 | 0.01–1.0 |
-| 4 | Makeup gain | 1.0 | 0.0–4.0 |
+| 0 | Threshold | 0.5 | 0.001–1.0 (amplitude) |
+| 1 | Ratio | 4.0 | 1.0–50.0 (higher = more reduction) |
+| 2 | Attack (s) | 0.01 | 0.0001–1.0 |
+| 3 | Release (s) | 0.1 | 0.001–5.0 |
+| 4 | Makeup gain | 1.0 | 0.0–10.0 |
 
 VCA-style: envelope follows peak of `(|L|+|R|)/2`, gain reduction computed in dB.
 
@@ -207,6 +207,15 @@ Per channel (`frost-core/src/dsp/mixer.rs`):
 
 Master bus (`MasterBus`) applies a brickwall limiter then master volume; exposes
 RMS + peak metering for all channels and the master.
+
+### Sample rate
+
+The engine is **sample-rate agnostic**. `MixerState.sample_rate` tracks the
+device's actual rate; `MixerState::set_sample_rate()` rebuilds all
+sample-rate-dependent DSP (synths, effects, mixer EQs, RMS windows, clock,
+master limiter) while preserving channel params, synth types, playlist, and the
+preset bank. CPAL calls this on stream start (`cpal_audio.rs`). The default is
+44100 Hz (`MixerState::new()`).
 
 ---
 

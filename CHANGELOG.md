@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sampler velocity layers and round-robin
 - MIDI recording and metronome
 
+### Docs
+- Corrected compressor parameter ranges to match actual clamps.
+- Clarified that `frost-core` is a workspace member, not a git submodule.
+- Updated `get_synth_presets` docs to describe disk-first loading.
+- Noted the sample-rate agnostic engine in the developer guide and DSP reference.
+- Flagged `src/presets/pro-trap-neo.json` as not wired to the engine.
+
 ## [0.1.0] - 2026-01-01
 
 ### Added

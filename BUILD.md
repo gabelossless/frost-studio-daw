@@ -197,11 +197,10 @@ these warnings but is optional for development and open-source distribution.
 ### Audio (all platforms)
 
 - **No sound / underruns (clicks and pops)**
-  1. Check the audio device selection in the Audio Settings modal.
+  1. Check the audio device selection in the Audio Settings modal; the engine
+     adapts to the device's sample rate automatically.
   2. Try a larger buffer size.
-  3. Confirm the audio device and buffer size settings in the Audio Settings
-     modal. The engine adapts to the device's sample rate automatically.
-  4. Close CPU-heavy applications.
+  3. Close CPU-heavy applications.
 
 ## Development Mode
 

@@ -158,8 +158,12 @@ fn set_sampler_sample(channel_id: usize, path: String) -> Result<(), String>
 fn get_synth_presets(synth_type: String) -> Result<Vec<SynthPreset>, String>
 ```
 
-`synth_type` ∈ `"Summit" | "Eruption" | "Nebula"`. Returns the factory bank.
-`SynthPreset`: `{ name, category, params: Vec<f32> }`.
+`synth_type` ∈ `"Summit" | "Eruption" | "Nebula"`. Loads `.json` patches from
+`<cwd>/src-tauri/presets/<synth>/` at runtime, falling back to the in-memory
+factory bank if the directory is missing or empty.
+`SynthPreset`: `{ name, category, params: Vec<f32> }`. On-disk patches map
+`cutoff, resonance, attack, decay, sustain, release, osc_mix` into `params`
+(7 elements).
 
 ---
 

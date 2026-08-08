@@ -15,10 +15,14 @@ The project follows a hybrid architecture to balance UI flexibility with low-lat
 - `src/`: React frontend source code.
     - `components/`: UI components (Arrangement, Mixer, Piano Roll, etc.).
     - `store/`: Zustand state management (`useDawStore.ts`).
-    - `presets/`: JSON preset banks for internal synths.
+    - `presets/`: `pro-trap-neo.json` — a standalone PRO-TRAP NEO preset bank,
+      currently **not wired to the engine** (PRO-TRAP NEO is not in `SynthType`).
+      The engine presets live in `src-tauri/presets/`.
 - `src-tauri/`: Rust backend source code.
     - `src/lib.rs`: Tauri command definitions and event emitting.
     - `src/cpal_audio.rs`: Native audio driver implementation.
+    - `presets/`: On-disk JSON presets (`summit/`, `eruption/`, `nebula/`),
+      loaded at runtime by `get_synth_presets`.
 - `frost-core/`: The "Brain" of the project. Contains shared DSP logic used by both the DAW and the VST3 export suite.
 - `vst/`: Workspace for compiling standalone Frost effects into VST3/CLAP formats using `nih-plug`.
 
@@ -43,7 +47,7 @@ The DAW supports native file dropping (`tauri://drop`). Dropping `.wav` or `.mp3
 ### 5. Native VST3 Hosting & Scanning
 Frost Studio hosts external VST3 plugins:
 - **Scanner**: Reads bundle `.vst3` structures and parses `moduleinfo.json` to extract full ClassIDs (CIDs) and parameters.
-- **Host Engine**: Loads binary binaries via `libloading` into a wrapper that translates frame buffers directly into the native mixer workflow seamlessly.
+- **Host Engine**: Loads plugin binaries via `libloading` into a wrapper that translates frame buffers directly into the native mixer workflow seamlessly.
 - **Sandboxing Pipeline**: (Planned) Isolate third-party DLL execution into child processes to safeguard DAW core stability.
 
 ## Data Flow
@@ -89,11 +93,15 @@ The system is split into three layers that communicate through narrow, well-defi
 ### Audio path (engine → speakers)
 
 1. CPAL opens a stream in a dedicated background thread (`src-tauri/src/lib.rs::run`).
-2. The stream callback calls `MixerState::generate_frame()` for each buffer.
-3. `generate_frame()` advances the master clock, schedules note-on/off from the
+2. When the stream starts, `cpal_audio.rs` calls `MixerState::set_sample_rate()`
+   to rebuild all sample-rate-dependent DSP at the device's actual rate
+   (48 kHz, 96 kHz, etc.), preserving channel params, synth types, playlist,
+   and preset bank.
+3. The stream callback calls `MixerState::generate_frame()` for each buffer.
+4. `generate_frame()` advances the master clock, schedules note-on/off from the
    MIDI playlist, sums synths + audio tracks per channel, runs channel EQ/pan/
    volume/sidechain, applies send effects (Reverb/Delay), then the master limiter.
-4. The stereo result is written to the audio device's output buffer.
+5. The stereo result is written to the audio device's output buffer.
 
 ### Metering path (engine → UI)
 
@@ -194,9 +202,13 @@ npm run tauri build
 Binaries will be placed inside `src-tauri/target/release/bundle/msi/` or `nsis/`.
 The **`.msi`** file is the recommended release distribution for Windows users.
 
-## Maintenance Note: Git & Submodules
+## Maintenance Note: Crate Layout
+
 > [!IMPORTANT]
-> The `frost-core` directory is treated as a submodule/separate crate. If you encounter issues during `git add`, ensure that `frost-core` has a valid commit checked out or is properly ignored if you are initializing a new parent repository from scratch.
+> `frost-core` is a **regular workspace member** (declared in the root
+> `Cargo.toml`), not a git submodule. Treat it as part of the same repository —
+> changes to it are committed and pushed with the rest of the code. No
+> submodule init/update is required.
 
 ---
 *Created by Frost Studio Senior Dev Agents - 2026*

@@ -26,6 +26,8 @@ See the [Roadmap](ROADMAP.md) for what's next.
 - ✅ Arrangement view with audio clip tracks
 - ✅ Offline WAV export
 - ✅ Sample browser
+- ✅ Runtime preset loading (JSON files, in-memory fallback)
+- ✅ Sample-rate adaptive engine (works at 44.1/48/96 kHz)
 - ✅ Real-time audio via CPAL (dedicated thread)
 - ⬜ Project save/load (planned for v0.2.0)
 - ⬜ MIDI recording & metronome (planned for v0.2.0)
@@ -110,8 +112,9 @@ frost-studio-daw/
 
 ## Roadmap
 
-v0.2.0 targets project save/load, audio track editing, and runtime preset
-loading. Full milestone details in [ROADMAP.md](ROADMAP.md).
+v0.2.0 targets project save/load and audio track editing. Runtime preset
+loading and sample-rate independence shipped in the Unreleased milestone.
+Full milestone details in [ROADMAP.md](ROADMAP.md).
 
 ## Contributing
 
