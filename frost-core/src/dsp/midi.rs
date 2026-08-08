@@ -87,3 +87,35 @@ impl MidiPlaylist {
         self.notes.sort_by_key(|n| n.start_tick);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clock_reset_returns_to_zero() {
+        let mut clock = MasterClock::new(44100.0, 120.0);
+        clock.start();
+        // Advance ~1 second worth of ticks
+        for _ in 0..44100 {
+            clock.tick();
+        }
+        assert!(clock.current_tick > 0);
+
+        clock.stop();
+        clock.reset();
+        assert_eq!(clock.current_tick, 0);
+    }
+
+    #[test]
+    fn playlist_update_sorts_by_start_tick() {
+        let mut playlist = MidiPlaylist::new();
+        playlist.update(vec![
+            NoteEvent { channel_id: 0, pitch: 60, velocity: 1.0, start_tick: 500, duration_ticks: 100 },
+            NoteEvent { channel_id: 0, pitch: 62, velocity: 1.0, start_tick: 100, duration_ticks: 100 },
+            NoteEvent { channel_id: 0, pitch: 64, velocity: 1.0, start_tick: 300, duration_ticks: 100 },
+        ]);
+        let starts: Vec<u64> = playlist.notes.iter().map(|n| n.start_tick).collect();
+        assert_eq!(starts, vec![100, 300, 500]);
+    }
+}

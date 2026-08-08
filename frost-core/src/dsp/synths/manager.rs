@@ -27,6 +27,7 @@ pub struct SynthManager {
     nebula: NebulaSynth,
     sampler: SamplerSynth,
     active_notes: Vec<u8>, // Voice stack for note-off tracking
+    current_params: SynthParams,
 }
 
 impl SynthManager {
@@ -38,6 +39,7 @@ impl SynthManager {
             nebula: NebulaSynth::new(sample_rate),
             sampler: SamplerSynth::new(sample_rate),
             active_notes: Vec::with_capacity(16),
+            current_params: SynthParams { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.2 },
         }
     }
 
@@ -89,10 +91,33 @@ impl SynthManager {
     }
 
     pub fn set_params(&mut self, p: SynthParams) {
+        self.current_params = p;
         self.summit.set_params(p.attack, p.decay, p.sustain, p.release);
         self.eruption.set_params(p.attack, p.decay, p.sustain, p.release);
         self.nebula.set_params(p.attack, p.decay, p.sustain, p.release);
         self.sampler.set_params(p.attack, p.decay, p.sustain, p.release);
+    }
+
+    /// Last parameters applied via `set_params` (preserved across rebuilds).
+    pub fn params(&self) -> SynthParams {
+        self.current_params
+    }
+
+    /// Path of the sample loaded into the internal sampler, if any.
+    pub fn sampler_sample_path(&self) -> Option<String> {
+        self.sampler.active_sample_path()
+    }
+
+    /// Force-release all voices without tearing down synth configuration.
+    /// Used on transport reset so ringing voices don't hang.
+    pub fn release_all(&mut self) {
+        self.active_notes.clear();
+        match self.active_type {
+            SynthType::Summit => self.summit.trigger_off(),
+            SynthType::Eruption => self.eruption.trigger_off(),
+            SynthType::Nebula => self.nebula.trigger_off(),
+            SynthType::Sampler => self.sampler.trigger_off(),
+        }
     }
 
     pub fn set_sampler_sample(&mut self, path: String) {

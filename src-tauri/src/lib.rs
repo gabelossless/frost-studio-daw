@@ -1,12 +1,12 @@
 mod cpal_audio;
 
 use frost_core::dsp::mixer::{ChannelParams, MeterLevel};
-use frost_core::dsp::synths::manager::{SynthManager, SynthParams, SynthType};
+use frost_core::dsp::synths::manager::{SynthParams, SynthType};
 use frost_core::dsp::midi::{NoteEvent};
 use frost_core::dsp::exporter::Exporter;
 use std::sync::Arc;
 use parking_lot::Mutex;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use std::path::{PathBuf};
 
 use frost_core::vst::{scan_vst3_plugins, VstPluginInfo};
@@ -151,7 +151,7 @@ fn set_synth_type(
 }
 
 #[tauri::command]
-async fn set_transport(
+fn set_transport(
     playing: bool,
     state: State<'_, SharedMixer>,
 ) -> Result<(), String> {
@@ -159,15 +159,26 @@ async fn set_transport(
     if playing {
         mixer.clock.start();
     } else {
+        // Pause: keep the clock position and note cursor so playback resumes
+        // seamlessly. Voices are NOT torn down — releasing them here would
+        // also wipe the user's synth type, sampler sample, and params.
         mixer.clock.stop();
-        // Reset MIDI state
-        mixer.next_note_index = 0;
-        mixer.active_notes.clear();
-        // Reset all synth states at the engine's sample rate
-        let sr = mixer.sample_rate;
-        for s in mixer.synths.iter_mut() {
-            *s = SynthManager::new(sr);
-        }
+    }
+    Ok(())
+}
+
+/// Full transport stop: rewind the clock, reset the sequencer cursor, clear
+/// active notes, and force-release any ringing voices (without wiping the
+/// user's synth configuration).
+#[tauri::command]
+fn reset_transport(state: State<'_, SharedMixer>) -> Result<(), String> {
+    let mut mixer = state.lock();
+    mixer.clock.stop();
+    mixer.clock.reset();
+    mixer.next_note_index = 0;
+    mixer.active_notes.clear();
+    for s in mixer.synths.iter_mut() {
+        s.release_all();
     }
     Ok(())
 }
@@ -479,38 +490,74 @@ fn set_audio_device(
 // App Entry Point
 // ────────────────────────────────────────────────────────────────────────────
 
+/// Owns the CPAL stream on a dedicated thread (bypassing Send/Sync issues with
+/// `cpal::Stream`). Restarts the engine on device changes and falls back to the
+/// last-known-good configuration if a restart fails, so audio never dies
+/// permanently because of one bad device selection.
+fn audio_engine_thread(mixer: SharedMixer, rx: std::sync::mpsc::Receiver<AudioMessage>, app: AppHandle) {
+    // Kept alive for the lifetime of the thread: dropping a `cpal::Stream` stops
+    // audio, so we must not let it go out of scope while the engine is running.
+    let mut _stream: Option<cpal::Stream> = None;
+    let mut last_good: Option<(Option<String>, Option<String>, Option<u32>)> = None;
+
+    // Start initial stream on the default host/device.
+    match cpal_audio::start_audio_engine(Arc::clone(&mixer), None, None, None) {
+        Ok(s) => _stream = Some(s),
+        Err(e) => {
+            let _ = app.emit("audio-engine-error", format!("Failed to start audio engine: {e}"));
+        }
+    }
+
+    while let Ok(msg) = rx.recv() {
+        match msg {
+            AudioMessage::SetDevice { host, device, buffer_size } => {
+                // Release the old stream so the new one can claim the device.
+                _stream = None;
+
+                match cpal_audio::start_audio_engine(
+                    Arc::clone(&mixer),
+                    Some(&host),
+                    Some(&device),
+                    buffer_size,
+                ) {
+                    Ok(s) => {
+                        _stream = Some(s);
+                        last_good = Some((Some(host), Some(device), buffer_size));
+                    }
+                    Err(e) => {
+                        let _ = app.emit(
+                            "audio-engine-error",
+                            format!("Failed to start audio on {host} / {device}: {e}"),
+                        );
+
+                        // Fall back to the last-known-good configuration, then defaults.
+                        let (h, d, b) = last_good.clone().unwrap_or((None, None, None));
+                        match cpal_audio::start_audio_engine(
+                            Arc::clone(&mixer),
+                            h.as_deref(),
+                            d.as_deref(),
+                            b,
+                        ) {
+                            Ok(s) => _stream = Some(s),
+                            Err(e2) => {
+                                let _ = app.emit("audio-engine-error", format!("Failed to recover audio engine: {e2}"));
+                                if let Ok(s) = cpal_audio::start_audio_engine(Arc::clone(&mixer), None, None, None) {
+                                    _stream = Some(s);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mixer_state: SharedMixer = Arc::new(Mutex::new(MixerState::new()));
 
     let (tx, rx) = std::sync::mpsc::channel::<AudioMessage>();
-    let mixer_state_clone = Arc::clone(&mixer_state);
-
-    // Spawn background thread to OWN the audio stream (bypassing Send/Sync issues with Stream)
-    std::thread::spawn(move || {
-        let mut _current_stream: Option<cpal::Stream> = None;
-        
-        // Start initial stream
-        if let Ok(s) = cpal_audio::start_audio_engine(Arc::clone(&mixer_state_clone), None, None, None) {
-             _current_stream = Some(s);
-        }
-        
-        while let Ok(msg) = rx.recv() {
-            match msg {
-                AudioMessage::SetDevice { host, device, buffer_size } => {
-                    _current_stream = None; // Drops stream, stopping audio
-                    if let Ok(s) = cpal_audio::start_audio_engine(
-                        Arc::clone(&mixer_state_clone),
-                        Some(&host),
-                        Some(&device),
-                        buffer_size
-                    ) {
-                        _current_stream = Some(s);
-                    }
-                }
-            }
-        }
-    });
 
     let engine_state = AudioEngineState::new(tx);
 
@@ -520,6 +567,14 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(mixer_state)
         .manage(engine_state)
+        .setup(move |app| {
+            let app_handle = app.handle().clone();
+            let mixer_state_clone = Arc::clone(&app.state::<SharedMixer>());
+            std::thread::spawn(move || {
+                audio_engine_thread(mixer_state_clone, rx, app_handle);
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             set_channel_params,
             set_master_volume,
@@ -528,6 +583,7 @@ pub fn run() {
             get_channel_defaults,
             sync_midi_data,
             set_transport,
+            reset_transport,
             get_available_vst3_plugins,
             set_synth_type,
             export_project,

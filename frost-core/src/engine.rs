@@ -61,6 +61,8 @@ impl MixerState {
         }
         let channel_params: Vec<_> = self.channels.iter().map(|c| c.params.clone()).collect();
         let synth_types: Vec<_> = self.synths.iter().map(|s| s.active_type()).collect();
+        let synth_params: Vec<_> = self.synths.iter().map(|s| s.params()).collect();
+        let sampler_samples: Vec<_> = self.synths.iter().map(|s| s.sampler_sample_path()).collect();
         let mut rebuilt = Self::with_sample_rate(new_rate);
         rebuilt.playlist = std::mem::replace(&mut self.playlist, MidiPlaylist::new());
         rebuilt.audio_tracks = std::mem::replace(&mut self.audio_tracks, Vec::new());
@@ -74,6 +76,12 @@ impl MixerState {
         for (i, s) in rebuilt.synths.iter_mut().enumerate() {
             if let Some(t) = synth_types.get(i) {
                 s.set_type(*t);
+            }
+            if let Some(p) = synth_params.get(i) {
+                s.set_params(*p);
+            }
+            if let Some(path) = sampler_samples.get(i).and_then(|p| p.clone()) {
+                s.set_sampler_sample(path);
             }
         }
         *self = rebuilt;
@@ -114,7 +122,14 @@ impl MixerState {
             });
         }
 
+        // Solo: if any channel is soloed, only soloed channels are audible.
+        let any_solo = self.channels.iter().any(|c| c.params.soloed);
+
         for i in 0..NUM_CHANNELS {
+            if any_solo && !self.channels[i].params.soloed {
+                continue;
+            }
+
             let synth_sample = self.synths[i].process();
             
             let mut track_l = synth_sample;
@@ -244,5 +259,52 @@ mod tests {
         let mut m = MixerState::with_sample_rate(44100.0);
         m.set_sample_rate(44100.0);
         assert_eq!(m.sample_rate, 44100.0);
+    }
+
+    #[test]
+    fn set_sample_rate_preserves_synth_config() {
+        let mut m = MixerState::with_sample_rate(44100.0);
+        m.synths[0].set_type(SynthType::Eruption);
+        m.synths[0].set_sampler_sample("C:\\samples\\kick.wav".to_string());
+        let p = crate::dsp::synths::manager::SynthParams { attack: 0.02, decay: 0.2, sustain: 0.4, release: 0.3 };
+        m.synths[0].set_params(p);
+
+        m.set_sample_rate(96000.0);
+
+        assert_eq!(m.synths[0].active_type(), SynthType::Eruption);
+        assert_eq!(m.synths[0].sampler_sample_path().as_deref(), Some("C:\\samples\\kick.wav"));
+        assert_eq!(m.synths[0].params().attack, 0.02);
+    }
+
+    #[test]
+    fn solo_routes_only_soloed_channels_to_master() {
+        use crate::dsp::midi::NoteEvent;
+
+        let notes = vec![
+            NoteEvent { channel_id: 0, pitch: 48, velocity: 1.0, start_tick: 0, duration_ticks: 4800 },
+            NoteEvent { channel_id: 1, pitch: 48, velocity: 1.0, start_tick: 0, duration_ticks: 4800 },
+        ];
+
+        let mut full = MixerState::with_sample_rate(44100.0);
+        full.playlist.update(notes.clone());
+        full.clock.start();
+        let mut mixed: f64 = 0.0;
+        for _ in 0..44100 {
+            let (l, r) = full.generate_frame();
+            mixed += (l.abs() + r.abs()) as f64;
+        }
+        assert!(mixed > 0.0, "full mix should be audible");
+
+        let mut soloed = MixerState::with_sample_rate(44100.0);
+        soloed.playlist.update(notes);
+        soloed.channels[0].params.soloed = true;
+        soloed.clock.start();
+        let mut solo_sum: f64 = 0.0;
+        for _ in 0..44100 {
+            let (l, r) = soloed.generate_frame();
+            solo_sum += (l.abs() + r.abs()) as f64;
+        }
+        assert!(solo_sum > 0.0, "soloed channel should remain audible");
+        assert!(solo_sum < mixed, "soloing one of two identical channels should reduce the mix");
     }
 }

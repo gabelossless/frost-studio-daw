@@ -19,8 +19,13 @@ impl Exporter {
         let mut writer = hound::WavWriter::create(path, spec)
             .map_err(|e| format!("Failed to create WAV writer: {}", e))?;
 
-        // Reset clock to start
+        // Reset the sequencer so the render starts cleanly from bar one.
         mixer_state.clock.reset();
+        mixer_state.next_note_index = 0;
+        mixer_state.active_notes.clear();
+        for s in mixer_state.synths.iter_mut() {
+            s.release_all();
+        }
         mixer_state.clock.start();
 
         // Calculate total samples

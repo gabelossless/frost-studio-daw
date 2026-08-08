@@ -61,8 +61,10 @@ pub fn start_audio_engine(
     }
 
     // Rebuild the engine's DSP at the device's actual sample rate.
-    if let Some(mut mixer) = mixer.try_lock() {
-        mixer.set_sample_rate(config.sample_rate.0 as f32);
+    // Not on the audio thread, so a blocking lock is fine here.
+    {
+        let mut guard = mixer.lock();
+        guard.set_sample_rate(config.sample_rate.0 as f32);
     }
 
     println!("Starting CPAL audio engine. Host: {:?}, Device: {}, Config: {:?}", host.id(), device.name().unwrap_or_default(), config);
@@ -80,6 +82,32 @@ pub fn start_audio_engine(
     Ok(stream)
 }
 
+/// Write one stereo pair into a frame, handling every channel layout.
+/// Channels beyond the stereo pair are zero-filled so multichannel
+/// devices never receive uninitialized/garbage samples.
+#[inline(always)]
+fn write_output_frame<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
+    frame: &mut [T],
+    out_l: f32,
+    out_r: f32,
+) {
+    match frame.len() {
+        0 => {}
+        1 => frame[0] = T::from_sample((out_l + out_r) * 0.5),
+        2 => {
+            frame[0] = T::from_sample(out_l);
+            frame[1] = T::from_sample(out_r);
+        }
+        n => {
+            frame[0] = T::from_sample(out_l);
+            frame[1] = T::from_sample(out_r);
+            for sample in frame[2..n].iter_mut() {
+                *sample = T::from_sample(0.0);
+            }
+        }
+    }
+}
+
 fn run<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
@@ -87,6 +115,12 @@ fn run<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
 ) -> Result<cpal::Stream, Box<dyn std::error::Error>> {
     let channels = config.channels as usize;
     let err_fn = |err| eprintln!("An error occurred on the audio stream: {}", err);
+
+    // Held across callbacks so a lock miss can repeat the last valid sample
+    // instead of clicking to zero. Faded to silence if contention persists.
+    let mut last_l: f32 = 0.0;
+    let mut last_r: f32 = 0.0;
+    let mut lock_misses: u32 = 0;
 
     let stream = device.build_output_stream(
         config,
@@ -99,25 +133,22 @@ fn run<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
                     } else {
                         (0.0, 0.0)
                     };
-                    
-                    if channels >= 2 {
-                        frame[0] = T::from_sample(out_l);
-                        frame[1] = T::from_sample(out_r);
-                    } else if channels == 1 {
-                        frame[0] = T::from_sample((out_l + out_r) * 0.5);
-                    } else {
-                        frame[0] = T::from_sample(out_l);
-                        frame[1] = T::from_sample(out_r);
-                        for i in 2..channels {
-                            frame[i] = T::from_sample(0.0);
-                        }
-                    }
+                    write_output_frame(frame, out_l, out_r);
+                    last_l = out_l;
+                    last_r = out_r;
                 }
+                lock_misses = 0;
             } else {
+                // The UI thread briefly holds the mixer lock. Holding the last
+                // valid frame avoids a hard click-to-zero dropout; if the
+                // contention persists, fade to silence instead of outputting DC.
                 for frame in data.chunks_mut(channels) {
-                     for sample in frame.iter_mut() {
-                         *sample = T::from_sample(0.0);
-                     }
+                    write_output_frame(frame, last_l, last_r);
+                }
+                lock_misses += 1;
+                if lock_misses > 64 {
+                    last_l = 0.0;
+                    last_r = 0.0;
                 }
             }
         },

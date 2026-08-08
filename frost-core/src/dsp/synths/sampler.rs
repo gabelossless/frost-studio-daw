@@ -26,6 +26,10 @@ impl SamplerSynth {
         self.active_sample_path = Some(path);
     }
 
+    pub fn active_sample_path(&self) -> Option<String> {
+        self.active_sample_path.clone()
+    }
+
     pub fn trigger_on(&mut self, pitch: u8, _velocity: f32) {
         // Calculate speed relative to Middle C (60)
         self.active_pitch = pitch;

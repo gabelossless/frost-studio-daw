@@ -176,6 +176,7 @@ function pitchToMidiNumber(pitch: string): number {
 }
 
 let meterUnlisten: (() => void) | null = null;
+let audioErrorUnlisten: (() => void) | null = null;
 let audioTickInterval: number | null = null;
 let rafTickId: number | null = null;
 let midiAccessCleanup: (() => void) | null = null;
@@ -260,7 +261,7 @@ export const useDawStore = create<DawState>()(
             stop: async () => {
                 set({ isPlaying: false, isRecording: false, playheadPosition: 0 });
                 if (window.__TAURI_INTERNALS__ || true) {
-                    await invoke('set_transport', { playing: false }).catch(console.error);
+                    await invoke('reset_transport').catch(console.error);
                 }
                 if (rafTickId) { cancelAnimationFrame(rafTickId); rafTickId = null; }
             },
@@ -532,6 +533,7 @@ export const useDawStore = create<DawState>()(
                 await invoke('set_master_volume', { volume: get().masterVolume }).catch(console.error);
                 await invoke('set_tempo', { tempo: get().tempo }).catch(console.error);
                 await invoke('set_synth_params', { params: get().synthParams }).catch(console.error);
+                await invoke('set_master_limiter_params', { ...get().masterLimiterParams }).catch(console.error);
                 await get().syncAudioTracks();
                 await get().syncMidi();
 
@@ -589,6 +591,11 @@ export const useDawStore = create<DawState>()(
                     }
                     event.payload.forEach(m => { metersObj[m.channel_id] = m; });
                     set({ meters: metersObj, playheadPosition: newPlayhead });
+                });
+
+                if (audioErrorUnlisten) audioErrorUnlisten();
+                audioErrorUnlisten = await listen<string>('audio-engine-error', (event) => {
+                    console.error('Audio engine error:', event.payload);
                 });
             }
         }),

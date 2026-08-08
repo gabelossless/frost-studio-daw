@@ -113,7 +113,9 @@ impl BiquadFilter {
             }
             FilterType::LowShelf => {
                 // Low shelf filter
-                let alpha_s = sin_w0 / 2.0 * ((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0).sqrt();
+                // The radicand can go negative for boosted shelves with Q > 1;
+                // clamp it so we never emit NaN coefficients into the audio thread.
+                let alpha_s = sin_w0 / 2.0 * ((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0).max(0.0).sqrt();
                 let b0 = a * ((a + 1.0) - (a - 1.0) * cos_w0 + 2.0 * alpha_s);
                 let b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w0);
                 let b2 = a * ((a + 1.0) - (a - 1.0) * cos_w0 - 2.0 * alpha_s);
@@ -129,7 +131,7 @@ impl BiquadFilter {
             }
             FilterType::HighShelf => {
                 // High shelf filter
-                let alpha_s = sin_w0 / 2.0 * ((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0).sqrt();
+                let alpha_s = sin_w0 / 2.0 * ((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0).max(0.0).sqrt();
                 let b0 = a * ((a + 1.0) + (a - 1.0) * cos_w0 + 2.0 * alpha_s);
                 let b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w0);
                 let b2 = a * ((a + 1.0) + (a - 1.0) * cos_w0 - 2.0 * alpha_s);
@@ -192,5 +194,20 @@ mod tests {
         assert!(f.b0.is_finite());
         assert!(f.b1.is_finite());
         assert!(f.b2.is_finite());
+    }
+
+    #[test]
+    fn test_shelf_q_above_one_never_nan() {
+        // Regression: boosted shelves with Q > 1 previously produced a negative
+        // sqrt radicand, injecting NaN into the audio thread.
+        for filter_type in [FilterType::LowShelf, FilterType::HighShelf] {
+            for gain_db in [-24.0, -12.0, 0.0, 6.0, 24.0] {
+                let mut f = BiquadFilter::new(filter_type, 500.0, gain_db, 3.0, 44100.0);
+                assert!(f.b0.is_finite(), "{:?} gain {} -> b0 not finite", filter_type, gain_db);
+                assert!(f.a1.is_finite(), "{:?} gain {} -> a1 not finite", filter_type, gain_db);
+                let out = f.process(0.5);
+                assert!(out.is_finite(), "{:?} gain {} -> output not finite", filter_type, gain_db);
+            }
+        }
     }
 }
